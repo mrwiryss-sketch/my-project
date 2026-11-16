@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Крестики-нолики онлайн</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; padding: 24px;
+      display: grid; place-items: center;
+      font-family: system-ui, Arial, sans-serif; color: #f8fafc;
+      background: radial-gradient(circle at top, #263b63, #101827 65%);
+    }
+    .app {
+      width: min(100%, 440px); padding: 28px;
+      background: rgba(20, 31, 51, .96); border: 1px solid #334766;
+      border-radius: 24px; box-shadow: 0 24px 70px #0008;
+    }
+    h1 { margin: 0 0 8px; text-align: center; font-size: clamp(25px, 6vw, 34px); }
+    .subtitle { margin: 0 0 24px; text-align: center; color: #a9bad2; }
+    .panel { padding: 16px; border-radius: 16px; background: #0e192b; margin-bottom: 16px; }
+    .panel h2 { margin: 0 0 12px; font-size: 17px; }
+    .row { display: flex; gap: 8px; }
+    input {
+      min-width: 0; flex: 1; padding: 12px 14px; border-radius: 10px;
+      border: 1px solid #425574; background: #18263d; color: white;
+      font-size: 16px; text-transform: uppercase;
+    }
+    button {
+      border: 0; border-radius: 10px; padding: 12px 15px;
+      font-weight: 700; font-size: 15px; cursor: pointer;
+      transition: transform .15s, filter .15s;
+    }
+    button:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    .primary { background: #38bdf8; color: #082032; }
+    .secondary { background: #334766; color: #f8fafc; }
+    .status {
+      min-height: 52px; display: grid; place-items: center; text-align: center;
+      padding: 12px; margin: 16px 0; border-radius: 12px;
+      background: #0e192b; color: #dbeafe; font-weight: 650;
+    }
+    .roomline { text-align: center; color: #a9bad2; font-size: 14px; margin-top: 10px; }
+    #roomCode { color: #67e8f9; font-weight: 800; letter-spacing: 3px; font-size: 19px; }
+    .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .cell {
+      aspect-ratio: 1; padding: 0; border-radius: 15px;
+      background: #263852; color: white; font-size: clamp(42px, 13vw, 66px);
+      line-height: 1; border: 1px solid #405675;
+    }
+    .cell.x { color: #38bdf8; }
+    .cell.o { color: #fb7185; }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    .actions button { flex: 1; }
+    .hint { color: #9fb0c9; font-size: 12px; line-height: 1.5; margin: 16px 2px 0; }
+    .hidden { display: none !important; }
+    #connection { font-size: 13px; text-align: center; color: #9fb0c9; margin-top: 12px; }
+    @media (max-width: 380px) {
+      .app { padding: 18px; }
+      .row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<main class="app">
+  <h1>❌ Крестики-нолики ⭕</h1>
+  <p class="subtitle">Играй с другом через интернет</p>
+
+  <section id="lobby">
+    <div class="panel">
+      <h2>Создать комнату</h2>
+      <button class="primary" id="createBtn" style="width:100%">Создать новую комнату</button>
+    </div>
+    <div class="panel">
+      <h2>Войти в комнату</h2>
+      <div class="row">
+        <input id="roomInput" maxlength="6" placeholder="КОД КОМНАТЫ" autocomplete="off">
+        <button class="secondary" id="joinBtn">Войти</button>
+      </div>
+    </div>
+    <div id="lobbyMessage" class="roomline" aria-live="polite">Создай комнату или введи код друга.</div>
+  </section>
+
+  <section id="game" class="hidden">
+    <div class="roomline">Код комнаты: <span id="roomCode"></span></div>
+    <div class="status" id="status" aria-live="polite">Подключаемся...</div>
+    <div class="board" id="board">
+      <button class="cell" data-index="0" aria-label="Клетка 1"></button>
+      <button class="cell" data-index="1" aria-label="Клетка 2"></button>
+      <button class="cell" data-index="2" aria-label="Клетка 3"></button>
+      <button class="cell" data-index="3" aria-label="Клетка 4"></button>
+      <button class="cell" data-index="4" aria-label="Клетка 5"></button>
+      <button class="cell" data-index="5" aria-label="Клетка 6"></button>
+      <button class="cell" data-index="6" aria-label="Клетка 7"></button>
+      <button class="cell" data-index="7" aria-label="Клетка 8"></button>
+      <button class="cell" data-index="8" aria-label="Клетка 9"></button>
+    </div>
+    <div class="actions">
+      <button class="secondary" id="resetBtn">↻ Новая игра</button>
+      <button class="secondary" id="leaveBtn">Выйти</button>
+    </div>
+    <div id="connection">Ожидание соединения...</div>
+  </section>
+
+  <p class="hint">
+    Важно: для игры через интернет оба игрока должны открыть эту страницу.
+    Создатель отправляет другу шестизначный код комнаты. Для публикации сайта
+    размести этот файл на GitHub Pages, Netlify или другом статическом хостинге.
+  </p>
+</main>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const lobby = $("lobby");
+  const game = $("game");
+  const status = $("status");
+  const connectionText = $("connection");
+  const cells = [...document.querySelectorAll(".cell")];
+
+  let peer = null;
+  let connection = null;
+  let isHost = false;
+  let roomCode = "";
+  let myMark = "";
+  let board = Array(9).fill("");
+  let turn = "X";
+  let gameOver = false;
+  let connected = false;
+
+  const wins = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6]
+  ];
+
+  function showLobby(message = "Создай комнату или введи код друга.") {
+    lobby.classList.remove("hidden");
+    game.classList.add("hidden");
+    $("lobbyMessage").textContent = message;
+  }
+
+  function showGame() {
+    lobby.classList.add("hidden");
+    game.classList.remove("hidden");
+    $("roomCode").textContent = roomCode;
+  }
+
+  function setStatus(message) { status.textContent = message; }
+
+  function draw() {
+    cells.forEach((cell, i) => {
+      cell.textContent = board[i];
+      cell.classList.toggle("x", board[i] === "X");
+      cell.classList.toggle("o", board[i] === "O");
+      cell.disabled = !connected || gameOver || board[i] !== "" || turn !== myMark;
+    });
+    if (!connected) setStatus("Ожидаем второго игрока…");
+    else if (gameOver) {
+      const winner = wins.find(([a,b,c]) => board[a] && board[a] === board[b] && board[b] === board[c]);
+      setStatus(winner ? `🎉 Победил игрок ${board[winner[0]]}!` : "🤝 Ничья!");
+    } else {
+      setStatus(turn === myMark ? `Твой ход (${myMark})` : `Ход соперника (${turn})`);
+    }
+  }
+
+  function evaluate() {
+    const winningLine = wins.find(([a,b,c]) => board[a] && board[a] === board[b] && board[b] === board[c]);
+    gameOver = Boolean(winningLine) || board.every(Boolean);
+  }
+
+  function sendState() {
+    if (connection && connection.open) {
+      connection.send({ type: "state", board, turn, gameOver });
+    }
+    draw();
+  }
+
+  function handleMessage(message) {
+    if (!message || typeof message !== "object") return;
+
+    // Сервером состояния выступает создатель комнаты (X).
+    if (isHost) {
+      if (message.type === "move" && connected && !gameOver &&
+          turn === "O" && Number.isInteger(message.index) &&
+          message.index >= 0 && message.index < 9 && board[message.index] === "") {
+        board[message.index] = "O";
+        turn = "X";
+        evaluate();
+        sendState();
+      } else if (message.type === "reset") {
+        resetBoard();
+      }
+      return;
+    }
+
+    if (message.type === "state" && Array.isArray(message.board) && message.board.length === 9) {
+      board = message.board;
+      turn = message.turn === "O" ? "O" : "X";
+      gameOver = Boolean(message.gameOver);
+      draw();
+    } else if (message.type === "opponent-left") {
+      connected = false;
+      connectionText.textContent = "Соперник отключился.";
+      draw();
+    }
+  }
+
+  function attachConnection(conn) {
+    connection = conn;
+    conn.on("open", () => {
+      connected = true;
+      connectionText.textContent = isHost ? "Друг подключился. Ты играешь за X." : "Ты подключился. Ты играешь за O.";
+      if (isHost) sendState();
+      else draw();
+    });
+    conn.on("data", handleMessage);
+    conn.on("close", () => {
+      connected = false;
+      connectionText.textContent = "Соединение с соперником потеряно.";
+      draw();
+    });
+    conn.on("error", () => {
+      connected = false;
+      connectionText.textContent = "Ошибка соединения. Попробуйте подключиться заново.";
+      draw();
+    });
+  }
+
+  function makePeer(id) {
+    return new Promise((resolve, reject) => {
+      peer = id ? new Peer(id) : new Peer();
+      peer.on("open", resolve);
+      peer.on("error", reject);
+      peer.on("connection", conn => {
+        if (!isHost || connection) {
+          conn.on("open", () => conn.close());
+          return;
+        }
+        attachConnection(conn);
+      });
+      peer.on("disconnected", () => {
+        connectionText.textContent = "Потеряна связь с сервером соединения.";
+      });
+    });
+  }
+
+  function randomCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  async function createRoom() {
+    $("createBtn").disabled = true;
+    $("lobbyMessage").textContent = "Создаём комнату…";
+    isHost = true;
+    myMark = "X";
+    let success = false;
+
+    for (let attempt = 0; attempt < 5 && !success; attempt++) {
+      roomCode = randomCode();
+      try {
+        await makePeer("xo-room-" + roomCode);
+        success = true;
+      } catch (error) {
+        if (peer) { peer.destroy(); peer = null; }
+        if (error.type !== "unavailable-id") {
+          showLobby("Не удалось подключиться к сервису. Проверь интернет и попробуй ещё раз.");
+          break;
+        }
+      }
+    }
+
+    $("createBtn").disabled = false;
+    if (!success) {
+      if (peer) { peer.destroy(); peer = null; }
+      showLobby("Не получилось создать комнату. Попробуй ещё раз.");
+      return;
+    }
+
+    board = Array(9).fill("");
+    turn = "X";
+    gameOver = false;
+    connected = false;
+    showGame();
+    connectionText.textContent = "Отправь другу код комнаты. Ждём его подключения…";
+    draw();
+  }
+
+  async function joinRoom() {
+    const code = $("roomInput").value.trim();
+    if (!/^\d{6}$/.test(code)) {
+      $("lobbyMessage").textContent = "Введи правильный шестизначный код.";
+      return;
+    }
+
+    $("joinBtn").disabled = true;
+    $("lobbyMessage").textContent = "Подключаемся к комнате…";
+    isHost = false;
+    myMark = "O";
+    roomCode = code;
+
+    try {
+      await makePeer();
+      connection = peer.connect("xo-room-" + roomCode, { reliable: true });
+      attachConnection(connection);
+      showGame();
+      connectionText.textContent = "Соединяемся с создателем комнаты…";
+      draw();
+      setTimeout(() => {
+        if (!connected && peer) {
+          connectionText.textContent = "Не удалось подключиться. Проверь код и попробуй ещё раз.";
+        }
+      }, 12000);
+    } catch (error) {
+      if (peer) { peer.destroy(); peer = null; }
+      showLobby("Не удалось подключиться. Проверь код комнаты и интернет.");
+    } finally {
+      $("joinBtn").disabled = false;
+    }
+  }
+
+  function play(index) {
+    if (!connected || gameOver || board[index] || turn !== myMark) return;
+
+    if (isHost) {
+      board[index] = "X";
+      turn = "O";
+      evaluate();
+      sendState();
+    } else if (connection && connection.open) {
+      connection.send({ type: "move", index });
+    }
+  }
+
+  function resetBoard() {
+    if (!isHost) {
+      if (connection && connection.open) connection.send({ type: "reset" });
+      return;
+    }
+    board = Array(9).fill("");
+    turn = "X";
+    gameOver = false;
+    sendState();
+  }
+
+  function leaveRoom() {
+    if (connection && connection.open && isHost) {
+      connection.send({ type: "opponent-left" });
+    }
+    if (peer) peer.destroy();
+    peer = null;
+    connection = null;
+    connected = false;
+    isHost = false;
+    roomCode = "";
+    myMark = "";
+    board = Array(9).fill("");
+    turn = "X";
+    gameOver = false;
+    showLobby();
+  }
+
+  cells.forEach((cell, index) => cell.addEventListener("click", () => play(index)));
+  $("createBtn").addEventListener("click", createRoom);
+  $("joinBtn").addEventListener("click", joinRoom);
+  $("resetBtn").addEventListener("click", resetBoard);
+  $("leaveBtn").addEventListener("click", leaveRoom);
+  $("roomInput").addEventListener("keydown", event => {
+    if (event.key === "Enter") joinRoom();
+  });
+})();
+</script>
+</body>
+</html>
